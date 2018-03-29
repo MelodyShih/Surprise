@@ -199,6 +199,8 @@ class SVD(AlgoBase):
         # item factors
         cdef np.ndarray[np.double_t, ndim=2] qi
 
+        cdef np.ndarray[np.double_t] losshistory
+
         cdef int u, i, f
         cdef double r, err, dot, puf, qif
         cdef double global_mean = self.trainset.global_mean
@@ -221,6 +223,7 @@ class SVD(AlgoBase):
                         (trainset.n_users, self.n_factors))
         qi = rng.normal(self.init_mean, self.init_std_dev,
                         (trainset.n_items, self.n_factors))
+        losshistory = np.zeros(self.n_epochs, np.double)
 
         if not self.biased:
             global_mean = 0
@@ -235,7 +238,6 @@ class SVD(AlgoBase):
                 for f in range(self.n_factors):
                     dot += qi[i, f] * pu[u, f]
                 err = r - (global_mean + bu[u] + bi[i] + dot)
-
                 # update biases
                 if self.biased:
                     bu[u] += lr_bu * (err - reg_bu * bu[u])
@@ -247,11 +249,13 @@ class SVD(AlgoBase):
                     qif = qi[i, f]
                     pu[u, f] += lr_pu * (err * qif - reg_pu * puf)
                     qi[i, f] += lr_qi * (err * puf - reg_qi * qif)
+            losshistory[current_epoch] = err
 
         self.bu = bu
         self.bi = bi
         self.pu = pu
         self.qi = qi
+        self.losshistory = losshistory
 
     def estimate(self, u, i):
         # Should we cythonize this as well?
