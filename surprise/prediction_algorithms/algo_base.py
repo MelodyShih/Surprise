@@ -186,7 +186,7 @@ class AlgoBase(object):
 
         return self.trainset.global_mean
 
-    def test(self, testset, verbose=False):
+    def test(self, testset, verbose=False, clip=True):
         """Test the algorithm on given testset, i.e. estimate all the ratings
         in the given testset.
 
@@ -208,6 +208,7 @@ class AlgoBase(object):
         predictions = [self.predict(uid,
                                     iid,
                                     r_ui_trans - self.trainset.offset,
+                                    clip=clip,
                                     verbose=verbose)
                        for (uid, iid, r_ui_trans) in testset]
         return predictions
