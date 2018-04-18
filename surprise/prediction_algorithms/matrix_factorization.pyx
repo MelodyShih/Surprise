@@ -202,7 +202,9 @@ class SVD(AlgoBase):
         cdef np.ndarray[np.double_t] losshistory
 
         cdef int u, i, f
+        cdef int n_ratings = trainset.n_ratings
         cdef double r, err, dot, puf, qif
+        cdef double loss
         cdef double global_mean = self.trainset.global_mean
 
         cdef double lr_bu = self.lr_bu
@@ -231,13 +233,15 @@ class SVD(AlgoBase):
         for current_epoch in range(self.n_epochs):
             if self.verbose:
                 print("Processing epoch {}".format(current_epoch))
+            
+            loss = 0
             for u, i, r in trainset.all_ratings():
-
                 # compute current error
                 dot = 0  # <q_i, p_u>
                 for f in range(self.n_factors):
                     dot += qi[i, f] * pu[u, f]
                 err = r - (global_mean + bu[u] + bi[i] + dot)
+                loss = loss + err*err  
                 # update biases
                 if self.biased:
                     bu[u] += lr_bu * (err - reg_bu * bu[u])
@@ -249,8 +253,8 @@ class SVD(AlgoBase):
                     qif = qi[i, f]
                     pu[u, f] += lr_pu * (err * qif - reg_pu * puf)
                     qi[i, f] += lr_qi * (err * puf - reg_qi * qif)
-            losshistory[current_epoch] = err
 
+            losshistory[current_epoch] = np.sqrt(loss/n_ratings)
         self.bu = bu
         self.bi = bi
         self.pu = pu
