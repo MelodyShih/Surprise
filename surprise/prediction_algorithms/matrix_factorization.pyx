@@ -375,7 +375,7 @@ class SVDpp(AlgoBase):
             exists if ``fit()`` has been called)
     """
 
-    def __init__(self, n_factors=20, n_epochs=20, init_mean=0, init_std_dev=.1,
+    def __init__(self, n_factors=20, n_epochs=20, biased=True, init_mean=0, init_std_dev=.1,
                  lr_all=.007, reg_all=.02, lr_bu=None, lr_bi=None, lr_pu=None,
                  lr_qi=None, lr_yj=None, reg_bu=None, reg_bi=None, reg_pu=None,
                  reg_qi=None, reg_yj=None, random_state=None, verbose=False):
@@ -383,6 +383,7 @@ class SVDpp(AlgoBase):
         self.n_factors = n_factors
         self.n_epochs = n_epochs
         self.init_mean = init_mean
+        self.biased = biased
         self.init_std_dev = init_std_dev
         self.lr_bu = lr_bu if lr_bu is not None else lr_all
         self.lr_bi = lr_bi if lr_bi is not None else lr_all
@@ -449,6 +450,9 @@ class SVDpp(AlgoBase):
                         (trainset.n_items, self.n_factors))
         u_impl_fdb = np.zeros(self.n_factors, np.double)
 
+        if not self.biased:
+            global_mean = 0
+
         for current_epoch in range(self.n_epochs):
             if self.verbose:
                 print(" processing epoch {}".format(current_epoch))
@@ -470,10 +474,14 @@ class SVDpp(AlgoBase):
                     dot += qi[i, f] * (pu[u, f] + u_impl_fdb[f])
 
                 err = r - (global_mean + bu[u] + bi[i] + dot)
-
+                
                 # update biases
-                bu[u] += lr_bu * (err - reg_bu * bu[u])
-                bi[i] += lr_bi * (err - reg_bi * bi[i])
+                if self.biased:
+                    bu[u] += lr_bu * (err - reg_bu * bu[u])
+                    bi[i] += lr_bi * (err - reg_bi * bi[i])
+                # update biases
+                # bu[u] += lr_bu * (err - reg_bu * bu[u])
+                # bi[i] += lr_bi * (err - reg_bi * bi[i])
 
                 # update factors
                 for f in range(self.n_factors):
@@ -493,20 +501,42 @@ class SVDpp(AlgoBase):
         self.yj = yj
 
     def estimate(self, u, i):
+        
+        if self.biased:
+            est = self.trainset.global_mean
 
-        est = self.trainset.global_mean
+            if self.trainset.knows_user(u):
+                est += self.bu[u]
 
-        if self.trainset.knows_user(u):
-            est += self.bu[u]
+            if self.trainset.knows_item(i):
+                est += self.bi[i]
 
-        if self.trainset.knows_item(i):
-            est += self.bi[i]
+            if self.trainset.knows_user(u) and self.trainset.knows_item(i):
+                Iu = len(self.trainset.ur[u])  # nb of items rated by u
+                u_impl_feedback = (sum(self.yj[j] for (j, _)
+                                   in self.trainset.ur[u]) / np.sqrt(Iu))
+                est += np.dot(self.qi[i], self.pu[u] + u_impl_feedback)
+        else:
+            if self.trainset.knows_user(u) and self.trainset.knows_item(i):
+                est = 0
+                Iu = len(self.trainset.ur[u])  # nb of items rated by u
+                u_impl_feedback = (sum(self.yj[j] for (j, _)
+                                   in self.trainset.ur[u]) / np.sqrt(Iu))
+                est += np.dot(self.qi[i], self.pu[u] + u_impl_feedback)
 
-        if self.trainset.knows_user(u) and self.trainset.knows_item(i):
-            Iu = len(self.trainset.ur[u])  # nb of items rated by u
-            u_impl_feedback = (sum(self.yj[j] for (j, _)
-                               in self.trainset.ur[u]) / np.sqrt(Iu))
-            est += np.dot(self.qi[i], self.pu[u] + u_impl_feedback)
+        # est = self.trainset.global_mean
+
+        # if self.trainset.knows_user(u):
+        #     est += self.bu[u]
+
+        # if self.trainset.knows_item(i):
+        #     est += self.bi[i]
+
+        # if self.trainset.knows_user(u) and self.trainset.knows_item(i):
+        #     Iu = len(self.trainset.ur[u])  # nb of items rated by u
+        #     u_impl_feedback = (sum(self.yj[j] for (j, _)
+        #                        in self.trainset.ur[u]) / np.sqrt(Iu))
+        #     est += np.dot(self.qi[i], self.pu[u] + u_impl_feedback)
 
         return est
 
